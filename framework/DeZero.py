@@ -1,7 +1,7 @@
 import numpy as np
 
-from framework.dezero.core_simple import Variable
-from framework.dezero.utils import plot_dot_graph
+from dezero.core_simple import Variable, sin, my_sin, rosenbrock, tanh
+from dezero.utils import plot_dot_graph
 
 
 def sphere(x, y):
@@ -22,12 +22,18 @@ def goldstein(x, y):
 
 
 if __name__ == '__main__':
+   x = Variable(np.array(1.0))
+   y = tanh(x)
+   x.name = 'x'
+   y.name = 'y'
+   y.backward(create_graph=True)
 
+   iters = 10
+   for i in range(iters):
+       gx = x.grad
+       x.cleargrad()
+       gx.backward(create_graph=True)
 
-    x = Variable(np.array(1.0))
-    y = Variable(np.array(1.0))
-    z = goldstein(x, y)  # sphere(x, y) / matyas(x, y)
-    z.backward()
-    print(x.grad, y.grad)
-
-    plot_dot_graph(z, verbose=False, to_file='goldstein.png')
+   gx = x.grad
+   gx.name  = 'gx' + str(iters + 1)
+   plot_dot_graph(gx, verbose=False, to_file='tanh.png')

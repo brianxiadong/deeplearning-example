@@ -1,4 +1,5 @@
 import contextlib
+import math
 import unittest
 import weakref
 
@@ -55,15 +56,18 @@ class Variable:
         self.creator = func
         self.generation = self.creator.generation + 1
 
+    def cleargrad(self):
+        self.grad = None
+
     def __repr__(self):
         if self is None:
             return 'variable(None)'
         p = str(self.data).replace('\n', '\n' + ' ' * 9)
         return 'variable(%s)' % p
 
-    def backward(self, retain_grad=False):
+    def backward(self, retain_grad=False , create_graph=False):
         if self.grad is None:
-            self.grad = np.ones_like(self.data)
+            self.grad = Variable(np.ones_like(self.data))
         # f = self.creator
         # if f is not None:
         #     x = f.input
@@ -85,26 +89,27 @@ class Variable:
         while funcs:
             f = funcs.pop()
             gys = [output().grad for output in f.outputs]
-            gxs = f.backward(*gys)
+            with using_config("enable_backprop", create_graph):
+                gxs = f.backward(*gys)
 
-            if not isinstance(gxs, tuple):
-                gxs = (gxs,)
+                if not isinstance(gxs, tuple):
+                    gxs = (gxs,)
 
-            for x, gx in zip(f.inputs, gxs) :
-                if x.grad is None:
-                    x.grad = gx
-                else:
-                    x.grad = x.grad + gx
+                for x, gx in zip(f.inputs, gxs) :
+                    if x.grad is None:
+                        x.grad = gx
+                    else:
+                        x.grad = x.grad + gx
 
-                if x.creator is not None:
-                    add_func(x.creator)
+                    if x.creator is not None:
+                        add_func(x.creator)
 
-            if not retain_grad:
-                for output in f.outputs:
-                    output().grad = None
+                if not retain_grad:
+                    for output in f.outputs:
+                        output().grad = None
 
-        def clear_grads(self):
-            self.grad = None
+    def clear_grads(self):
+        self.grad = None
 
 
 class Function:
@@ -139,7 +144,7 @@ class Square(Function):
         return x ** 2
 
     def backward(self, gy):
-        x = self.inputs[0].data
+        x = self.inputs[0]
         gx = 2 * x * gy
         return gx
 
@@ -157,9 +162,8 @@ class Mul( Function):
         y = x0 * x1
         return y
     def backward(self, gy):
-        x0, x1 = self.inputs[0].data, self.inputs[1].data
-        gx0, gx1 = gy * x1, gy * x0
-        return gx0, gx1
+        x0, x1 = self.inputs
+        return gy * x1, gy * x0
 
 def mul(x0,x1):
     x1 = as_array(x1)
@@ -269,7 +273,7 @@ class Pow(Function):
         return y
 
     def backward(self, gy):
-        x = self.inputs[0].data
+        x = self.inputs[0]
         c = self.c
         gx = c * x ** (c - 1) * gy
         return gx
@@ -278,6 +282,54 @@ def pow(x, c):
     return Pow(c)(x)
 
 
+class Sin(Function):
+    def forward(self, x):
+        y = np.sin(x)
+        return y
+
+    def backward(self, gy):
+        x, = self.inputs
+        gx = gy * cos(x)
+        return gx
+
+def sin(x):
+    return Sin()(x)
+
+def my_sin(x , threshold=0.0001):
+    y = 0
+    for i in range(100000):
+        c = (-1) ** i / math.factorial(2 * i + 1)
+        t = c * x ** (2 * i + 1)
+        y = y + t
+        if abs(t.data) < threshold:
+            break
+    return y
+
+class Cos(Function):
+    def forward(self, x):
+        y = np.cos(x)
+        return y
+    def backward(self, gy):
+        x, = self.inputs
+        gx = gy * -sin(x)
+        return gx
+def cos(x):
+    return Cos()(x)
+
+class Tanh(Function):
+    def forward(self, x):
+        y = np.tanh(x)
+        return y
+    def backward(self, gy):
+        y = self.outputs[0]()
+        gx = gy * (1 - y * y)
+        return gx
+def tanh(x):
+    return Tanh()(x)
+
+def rosenbrock(x0, x1):
+    y = 100 * (x1 - x0 ** 2) ** 2 + (x0 - 1) ** 2
+    return y
 def setup_variable():
     Variable.__pow__ = pow
     Variable.__truediv__ = div
