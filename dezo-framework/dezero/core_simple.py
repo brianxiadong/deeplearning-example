@@ -5,6 +5,9 @@ import weakref
 
 import numpy as np
 from onnxslim.third_party.onnx_graphsurgeon import Variable
+from .utils import reshape_sum_backward
+from .utils import np_sum_to
+
 
 @contextlib.contextmanager
 def using_config(name, value):
@@ -111,6 +114,17 @@ class Variable:
     def clear_grads(self):
         self.grad = None
 
+    def reshape(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0],(tuple, list)):
+            shape = shape[0]
+        return reshape(self, shape)
+
+    def transpose(self):
+        return transpose(self)
+
+    @property
+    def T(self):
+        return transpose(self)
 
 class Function:
     def __call__(self, *inputs):
@@ -210,10 +224,15 @@ def as_variable(obj):
 
 class Add(Function):
     def forward(self, x0, x1):
+       self.x0_shape, self.x1_shape = x0.shape, x1.shape
        return x0 + x1
 
     def backward(self, gy):
-        return gy, gy
+        gx0 ,gx1 = gy, gy
+        if self.x0_shape != self.x1_shape:
+            gx0 = sum_to(gx0, self.x0_shape,)
+            gx1 = sum_to(gx1, self.x1_shape)
+        return gx0, gx1
 
 def add(x0, x1):
     x1 = as_array(x1)
@@ -330,6 +349,118 @@ def tanh(x):
 def rosenbrock(x0, x1):
     y = 100 * (x1 - x0 ** 2) ** 2 + (x0 - 1) ** 2
     return y
+
+class Reshape(Function):
+    def __init__(self, shape):
+        self.shape = shape
+
+    def forward(self, x):
+        self.x_shape = x.shape
+        y = x.reshape(self.shape)
+        return y
+
+    def backward(self, gy):
+        return reshape(gy, self.x_shape)
+
+def reshape(x, shape):
+    if x.shape == shape:
+        return as_variable(x)
+    return Reshape(shape)(x)
+
+class Transpose(Function):
+    def forward(self, x):
+        y = np.transpose(x)
+        return y
+    def backward(self, gy):
+        return transpose(gy)
+
+def transpose(x):
+    return Transpose()(x)
+
+class Sum(Function):
+
+    def __init__(self, axis, keepdims):
+        self.axis = axis
+        self.keepdims = keepdims
+    def forward(self, x):
+        self.x_shape = x.shape
+        y = x.sum(axis=self.axis, keepdims=self.keepdims)
+        return y
+
+    def backward(self, gy):
+        gy = reshape_sum_backward(gy, self.x_shape, self.axis, self.keepdims)
+        gx = broadcast_to(gy, self.x_shape)
+        return gx
+
+def sum(x, axis=None, keepdims=False):
+    return Sum(axis, keepdims)(x)
+
+class BroadcastTo(Function):
+    def __init__(self, shape):
+        self.shape = shape
+
+    def forward(self, x):
+        self.x_shape = x.shape
+        y = np.broadcast_to(x, self.shape)
+        return y
+
+    def backward(self, gy):
+        gx = sum_to(gy, self.x_shape)
+        return gx
+
+class SumTo(Function):
+    def __init__(self, shape):
+        self.shape = shape
+
+    def forward(self, x):
+        self.x_shape = x.shape
+        y = np_sum_to(x, shape=self.shape)
+        return y
+
+    def backward(self, gy):
+        gx = broadcast_to(gy, self.x_shape)
+        return gx
+
+def sum_to(x, shape):
+    if x.shape == shape:
+        return as_variable(x)
+    return SumTo(shape)(x)
+
+def broadcast_to(x, shape):
+    if x.shape == shape:
+        return as_variable(x)
+    return BroadcastTo(shape)(x)
+
+
+class MatMul( Function):
+    def forward(self, x, W):
+        y = x.dot(W)
+        return y
+
+    def backward(self, gy):
+        x, W = self.inputs
+        gx = matmul(gy, W.T)
+        gW = matmul(x.T, gy)
+        return gx, gW
+
+def matmul(x, W):
+    return MatMul()(x, W)
+
+
+def linear_simple(x, W, b=None) :
+    t = matmul(x, W)
+    if b is None:
+        return t
+    y = t + b
+    t.data = None
+    return y
+def mean_squared_error(x0, x1):
+        diff = x0 - x1
+        return sum(diff ** 2) / len(diff)
+def sigmoid_simple(x):
+    x = as_variable(x)
+    return 1 / (1 + exp(-x))
+
 def setup_variable():
     Variable.__pow__ = pow
     Variable.__truediv__ = div
