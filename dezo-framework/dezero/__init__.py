@@ -17,11 +17,14 @@ from .tensor_ops import (
 from .layers import Parameter, Layer, Linear, linear_simple
 
 # 模型和网络
-from .models import Model
+from .models import Model, MLP
 from .nets import TwoLayerNet
 
 # 损失函数
 from .losses import mean_squared_error, mean_absolute_error
+
+# 优化器
+from . import optimizers
 
 # 工具函数
 from .utils import plot_dot_graph, get_dot_graph
