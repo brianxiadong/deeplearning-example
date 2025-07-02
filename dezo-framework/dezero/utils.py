@@ -13,7 +13,8 @@ def _dot_var(v, verbose=False):
     if verbose and v.data is not None:
         if v.name is not None:
             name += ': '
-        name += str(v.shape) + ' ' + str(v.dtype)
+        # 使用 v.data.dtype 而不是 v.dtype
+        name += str(v.shape) + ' ' + str(v.data.dtype)
 
     return dot_var.format(id(v), name)
 
@@ -149,3 +150,29 @@ def np_sum_to(x, shape):
     if lead > 0:
         y = y.squeeze(lead_axis)
     return y
+
+
+# Rosenbrock函数和其他数学函数
+def rosenbrock(x0, x1):
+    """Rosenbrock函数，用于优化测试"""
+    y = 100 * (x1 - x0 ** 2) ** 2 + (x0 - 1) ** 2
+    return y
+
+
+def sphere(x, y):
+    """球函数，用于优化测试"""
+    z = x ** 2 + y ** 2
+    return z
+
+
+def matyas(x, y):
+    """Matyas函数，用于优化测试"""
+    z = 0.26 * (x ** 2 + y ** 2) - 0.48 * x * y
+    return z
+
+
+def goldstein(x, y):
+    """Goldstein-Price函数，用于优化测试"""
+    z = (1 + (x + y + 1) ** 2 * (19 - 14 * x + 3 * x ** 2 - 14 * y + 6 * x * y + 3 * y ** 2)) * \
+        (30 + (2 * x - 3 * y) ** 2 * (18 - 32 * x + 12 * x ** 2 + 48 * y - 36 * x * y + 27 * y ** 2))
+    return z
