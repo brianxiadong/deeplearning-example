@@ -1,5 +1,8 @@
 import numpy as np
-from .core import Function, as_array
+from numpy import clip
+
+from .core import Function, as_array, as_variable
+from .tensor_ops import *
 
 
 class Square(Function):
@@ -207,4 +210,10 @@ def numerical_diff(f, x, eps=1e-4):
     from .core import Variable
     x0, x1 = Variable(x.data - eps), Variable(x.data + eps)
     y0, y1 = f(x0), f(x1)
-    return (y1.data - y0.data) / (2 * eps) 
+    return (y1.data - y0.data) / (2 * eps)
+
+def softmax_simple(x , axis = 1):
+    x = as_variable(x)
+    y = exp(x)
+    sum_y = sum(y , axis = axis ,keepdims =True)
+    return y / sum_y

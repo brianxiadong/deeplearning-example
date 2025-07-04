@@ -29,6 +29,8 @@ from . import optimizers
 # 工具函数
 from .utils import plot_dot_graph, get_dot_graph
 
+from .datasets import *
+
 
 def setup_variable():
     """设置Variable类的运算符重载"""
