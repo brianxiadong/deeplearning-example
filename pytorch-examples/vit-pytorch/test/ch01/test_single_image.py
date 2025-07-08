@@ -179,54 +179,177 @@ def analyze_prediction(results):
         else:
             print(f"  😕 预测不够明确，与第二名差距仅: {gap:.3f}")
 
-def main():
-    """主函数"""
-    print("SimpleViT 单张图片分类测试")
-    print("=" * 50)
-    
-    # 设备选择
-    device = get_device()
-    
-    # 检查模型文件
-    model_path = 'best_simple_vit_optimized.pth'
-    if not os.path.exists(model_path):
-        print(f"❌ 模型文件不存在: {model_path}")
-        print("请先运行训练脚本生成模型文件")
-        return
-    
-    # 图片路径
-    image_path = '../../images/188451751860259_.pic.jpg'
-    if not os.path.exists(image_path):
-        print(f"❌ 图片文件不存在: {image_path}")
-        return
-    
+# 全局变量，用于缓存模型
+_cached_model = None
+_cached_device = None
+
+def predict_single_image(image_path, model_path='best_simple_vit_optimized.pth', top_k=5, verbose=True):
+    """
+    封装的预测方法 - 只需提供图片路径即可获得预测结果
+
+    Args:
+        image_path (str): 图片文件路径
+        model_path (str): 模型文件路径，默认为 'best_simple_vit_optimized.pth'
+        top_k (int): 返回前k个预测结果，默认为5
+        verbose (bool): 是否显示详细信息，默认为True
+
+    Returns:
+        dict: 包含预测结果的字典
+        {
+            'success': bool,           # 是否预测成功
+            'top_prediction': str,     # 最高预测类别
+            'confidence': float,       # 最高预测的置信度
+            'all_predictions': list,   # 所有top_k预测结果 [(class_name, probability), ...]
+            'image_size': tuple,       # 原始图像尺寸
+            'error': str              # 错误信息（如果有）
+        }
+    """
+    global _cached_model, _cached_device
+
+    result = {
+        'success': False,
+        'top_prediction': None,
+        'confidence': 0.0,
+        'all_predictions': [],
+        'image_size': None,
+        'error': None
+    }
+
     try:
-        # 加载模型
-        model = load_model(model_path, device)
-        
+        # 检查图片文件
+        if not os.path.exists(image_path):
+            result['error'] = f"图片文件不存在: {image_path}"
+            if verbose:
+                print(f"❌ {result['error']}")
+            return result
+
+        # 检查模型文件
+        if not os.path.exists(model_path):
+            result['error'] = f"模型文件不存在: {model_path}"
+            if verbose:
+                print(f"❌ {result['error']}")
+            return result
+
+        # 初始化设备和模型（使用缓存避免重复加载）
+        if _cached_model is None or _cached_device is None:
+            if verbose:
+                print("🔧 初始化模型...")
+            _cached_device = get_device()
+            _cached_model = load_model(model_path, _cached_device)
+
         # 预处理图像
+        if verbose:
+            print(f"🖼️  处理图像: {os.path.basename(image_path)}")
+
         image_tensor, original_image = preprocess_image(image_path)
         if image_tensor is None:
-            return
-        
+            result['error'] = "图像预处理失败"
+            return result
+
+        result['image_size'] = original_image.size
+
         # 进行预测
-        print(f"\n🔮 开始预测...")
-        results = predict_image(model, image_tensor, device, top_k=5)
-        
-        # 显示结果
-        display_results(results, image_path)
-        
-        # 分析预测
-        analyze_prediction(results)
-        
-        print(f"\n💡 注意: 此模型是在CIFAR-10数据集上训练的，只能识别以下10个类别:")
-        print(f"   {', '.join(CIFAR10_CLASSES)}")
-        print(f"   如果您的图片不属于这些类别，预测结果可能不准确。")
-        
+        if verbose:
+            print("🔮 开始预测...")
+
+        predictions = predict_image(_cached_model, image_tensor, _cached_device, top_k)
+
+        # 填充结果
+        result['success'] = True
+        result['top_prediction'] = predictions[0][0]
+        result['confidence'] = predictions[0][1]
+        result['all_predictions'] = predictions
+
+        # 显示结果（如果需要）
+        if verbose:
+            display_results(predictions, image_path)
+            analyze_prediction(predictions)
+
+        return result
+
     except Exception as e:
-        print(f"❌ 测试过程中出现错误: {e}")
-        import traceback
-        traceback.print_exc()
+        result['error'] = str(e)
+        if verbose:
+            print(f"❌ 预测过程中出现错误: {e}")
+        return result
+
+def simple_predict(image_path):
+    """
+    最简单的预测接口 - 只返回最可能的类别和置信度
+
+    Args:
+        image_path (str): 图片文件路径
+
+    Returns:
+        tuple: (predicted_class, confidence) 或 (None, 0.0) 如果失败
+    """
+    result = predict_single_image(image_path, verbose=False)
+    if result['success']:
+        return result['top_prediction'], result['confidence']
+    else:
+        return None, 0.0
+
+def batch_predict(image_paths, verbose=True):
+    """
+    批量预测多张图片
+
+    Args:
+        image_paths (list): 图片路径列表
+        verbose (bool): 是否显示详细信息
+
+    Returns:
+        list: 每张图片的预测结果字典列表
+    """
+    results = []
+
+    if verbose:
+        print(f"📦 开始批量预测 {len(image_paths)} 张图片...")
+
+    for i, image_path in enumerate(image_paths):
+        if verbose:
+            print(f"\n--- 图片 {i+1}/{len(image_paths)} ---")
+
+        result = predict_single_image(image_path, verbose=verbose)
+        results.append(result)
+
+    if verbose:
+        # 显示批量预测汇总
+        successful = sum(1 for r in results if r['success'])
+        print(f"\n📊 批量预测完成:")
+        print(f"   成功: {successful}/{len(image_paths)}")
+        print(f"   失败: {len(image_paths) - successful}/{len(image_paths)}")
+
+    return results
+
+def main():
+    """主函数 - 演示如何使用封装的方法"""
+    print("SimpleViT 单张图片分类测试")
+    print("=" * 50)
+
+    # 示例1: 使用详细预测方法
+    image_path = '../../images/188451751860259_.pic.jpg'
+    print("🔥 示例1: 详细预测")
+    result = predict_single_image(image_path)
+
+    if result['success']:
+        print(f"\n✅ 预测成功!")
+        print(f"   最可能类别: {result['top_prediction']}")
+        print(f"   置信度: {result['confidence']:.3f}")
+    else:
+        print(f"\n❌ 预测失败: {result['error']}")
+
+    # 示例2: 使用简单预测方法
+    print(f"\n🔥 示例2: 简单预测")
+    predicted_class, confidence = simple_predict(image_path)
+    if predicted_class:
+        print(f"   结果: {predicted_class} (置信度: {confidence:.3f})")
+    else:
+        print(f"   预测失败")
+
+    print(f"\n💡 使用说明:")
+    print(f"   1. predict_single_image(path) - 完整预测，返回详细结果")
+    print(f"   2. simple_predict(path) - 简单预测，只返回类别和置信度")
+    print(f"   3. batch_predict([paths]) - 批量预测多张图片")
 
 if __name__ == "__main__":
     main()

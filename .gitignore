@@ -1,1 +1,7 @@
 .idea
+/pytorch-examples/vit-pytorch/data/
+/pytorch-examples/vit-pytorch/test/ch01/data/
+/data/
+/pytorch-examples/vit-pytorch/test/ch01/final_simple_vit_optimized.pth
+/pytorch-examples/vit-pytorch/test/ch01/best_simple_vit.pth
+/pytorch-examples/vit-pytorch/test/ch01/best_simple_vit_optimized.pth

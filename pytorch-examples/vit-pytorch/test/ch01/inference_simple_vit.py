@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SimpleViT 推理示例
+SimpleViT 推理示例 - 内存优化版本
 演示如何使用训练好的 SimpleViT 模型进行预测
 """
 
@@ -13,7 +13,9 @@ import os
 import numpy as np
 
 # 添加上级目录到路径，以便导入vit_pytorch模块
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(current_dir))
+sys.path.insert(0, project_root)
 
 from vit_pytorch import SimpleViT
 
@@ -25,20 +27,20 @@ CIFAR10_CLASSES = [
 
 def load_model(model_path, device):
     """
-    加载训练好的模型
+    加载训练好的模型 - 内存优化版本
     """
     print(f"=== 加载模型 ===")
     print(f"模型路径: {model_path}")
-    
-    # 创建模型架构
+
+    # 创建模型架构 - 与训练时的优化配置相同
     model = SimpleViT(
-        image_size=224,
+        image_size=128,      # 优化后的尺寸
         patch_size=16,
         num_classes=10,
-        dim=512,
-        depth=6,
-        heads=8,
-        mlp_dim=1024,
+        dim=384,             # 优化后的维度
+        depth=4,             # 优化后的层数
+        heads=6,             # 优化后的头数
+        mlp_dim=768,         # 优化后的MLP维度
         channels=3,
         dim_head=64
     )
@@ -60,7 +62,7 @@ def preprocess_image(image_path):
     图像预处理
     """
     transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((128, 128)),  # 优化后的尺寸
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                            std=[0.229, 0.224, 0.225])
@@ -179,42 +181,68 @@ def demo_with_sample_data(model, device):
         prob = probabilities[0][i].item()
         print(f"  {class_name}: {prob:.4f}")
 
+def get_device():
+    """
+    智能设备选择：优先级 CUDA > MPS > CPU
+    """
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        device_name = torch.cuda.get_device_name(0)
+        print(f"🚀 使用 CUDA 设备: {device_name}")
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        device = torch.device('mps')
+        print(f"🍎 使用 Apple Silicon MPS 加速")
+    else:
+        device = torch.device('cpu')
+        print(f"💻 使用 CPU 设备")
+
+    return device
+
 def main():
     """
     主函数
     """
     print("SimpleViT 推理示例")
     print("=" * 50)
+
+    # 智能设备选择
+    device = get_device()
     
-    # 设置设备
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"使用设备: {device}")
-    
-    # 模型路径
-    model_path = 'best_simple_vit.pth'
-    
+    # 模型路径 - 优先使用优化版本
+    model_paths = ['best_simple_vit_optimized.pth', 'best_simple_vit.pth']
+    model_path = None
+
+    # 查找可用的模型文件
+    for path in model_paths:
+        if os.path.exists(path):
+            model_path = path
+            break
+
     # 检查模型文件是否存在
-    if not os.path.exists(model_path):
-        print(f"错误: 模型文件 {model_path} 不存在!")
-        print("请先运行 train_simple_vit.py 训练模型")
-        print("使用随机数据进行演示...")
-        
+    if model_path is None:
+        print(f"⚠️  模型文件不存在!")
+        print("💡 请先运行以下命令训练模型:")
+        print("   python train_simple_vit.py")
+        print("\n🎲 现在使用未训练的模型进行演示...")
+
         # 创建一个未训练的模型进行演示
         model = SimpleViT(
-            image_size=224,
+            image_size=128,      # 使用优化配置
             patch_size=16,
             num_classes=10,
-            dim=512,
-            depth=6,
-            heads=8,
-            mlp_dim=1024,
+            dim=384,
+            depth=4,
+            heads=6,
+            mlp_dim=768,
             channels=3,
             dim_head=64
         ).to(device)
         model.eval()
-        
+
         demo_with_sample_data(model, device)
         return
+
+    print(f"📂 找到模型文件: {model_path}")
     
     # 加载模型
     model = load_model(model_path, device)

@@ -10,9 +10,28 @@ import sys
 import os
 
 # 添加上级目录到路径，以便导入vit_pytorch模块
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(current_dir))
+sys.path.insert(0, project_root)
 
 from vit_pytorch import SimpleViT
+
+def get_device():
+    """
+    智能设备选择：优先级 CUDA > MPS > CPU
+    """
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        device_name = torch.cuda.get_device_name(0)
+        print(f"🚀 使用 CUDA 设备: {device_name}")
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        device = torch.device('mps')
+        print(f"🍎 使用 Apple Silicon MPS 加速")
+    else:
+        device = torch.device('cpu')
+        print(f"💻 使用 CPU 设备")
+
+    return device
 
 def test_simple_vit_basic():
     """测试 Simple ViT 的基本功能"""
@@ -200,7 +219,11 @@ def test_model_components():
 def main():
     """主测试函数"""
     print("开始 Simple ViT 测试...")
-    
+
+    # 显示设备信息
+    device = get_device()
+    print()
+
     try:
         # 运行所有测试
         test_simple_vit_basic()

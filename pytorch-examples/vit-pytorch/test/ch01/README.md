@@ -12,6 +12,7 @@
 - ✅ 不同输入尺寸测试：测试模型对不同图像尺寸的适应性
 - ✅ 梯度计算测试：验证反向传播和梯度计算的正确性
 - ✅ 模型组件测试：测试各个组件的输出形状和数据流
+- ✅ 智能设备检测：自动选择最优计算设备
 
 **运行方式**：
 ```bash
@@ -35,11 +36,11 @@ python test/ch01/01-simple_vit.py
 **功能**：在 CIFAR-10 数据集上训练 SimpleViT 模型
 
 **主要特性**：
-- 🔄 自动数据下载和预处理
+- 🔄 智能数据管理：自动检测已存在数据集，避免重复下载
 - 📊 实时训练进度显示
 - 💾 自动保存最佳模型
 - 📈 训练历史记录
-- ⚡ GPU/CPU 自动检测
+- ⚡ 智能设备选择：CUDA > Apple MPS > CPU
 
 **训练配置**：
 - 数据集：CIFAR-10 (10类，50K训练+10K测试)
@@ -97,7 +98,42 @@ python test/ch01/inference_simple_vit.py
   5. bird: 0.0156
 ```
 
+### 4. `check_device.py` - 设备检测工具
+**功能**：检测当前系统的 PyTorch 设备支持情况
+
+**检测内容**：
+- 🔍 PyTorch 版本和系统信息
+- 🚀 CUDA GPU 支持检测
+- 🍎 Apple MPS 支持检测
+- 💻 CPU 性能测试
+- 🎯 设备推荐建议
+
+**运行方式**：
+```bash
+python test/ch01/check_device.py
+```
+
+**输出示例**：
+```
+🍎 Apple MPS 支持检查
+========================================
+✅ MPS 可用
+✅ Apple Silicon 加速已启用
+✅ MPS 张量操作测试通过
+🚀 MPS 相对 CPU 加速比: 3.2x
+
+🎯 推荐设备配置
+========================================
+🍎 推荐使用 Apple MPS 进行训练
+```
+
 ## 🚀 快速开始
+
+### 步骤0：检测设备支持（推荐）
+```bash
+python test/ch01/check_device.py
+```
+检测当前系统的设备支持情况，获取最优配置建议。
 
 ### 步骤1：运行基础测试
 ```bash
@@ -109,7 +145,10 @@ python test/ch01/01-simple_vit.py
 ```bash
 python test/ch01/train_simple_vit.py
 ```
-在 CIFAR-10 上训练模型，大约需要 20-30 分钟（GPU）。
+在 CIFAR-10 上训练模型，时间取决于设备：
+- CUDA GPU: ~20-30分钟
+- Apple MPS: ~40-60分钟
+- CPU: ~2-4小时
 
 ### 步骤3：测试推理
 ```bash
@@ -121,13 +160,50 @@ python test/ch01/inference_simple_vit.py
 
 在 CIFAR-10 数据集上的预期性能：
 
-| 指标 | 数值 |
-|------|------|
-| 训练准确率 | ~85-90% |
-| 测试准确率 | ~75-80% |
-| 训练时间 | ~20-30分钟 (GPU) |
-| 模型大小 | ~85MB |
-| 参数数量 | ~21M |
+| 指标 | CUDA GPU | Apple MPS | CPU |
+|------|----------|-----------|-----|
+| 训练准确率 | ~85-90% | ~85-90% | ~85-90% |
+| 测试准确率 | ~75-80% | ~75-80% | ~75-80% |
+| 训练时间/epoch | ~2-3分钟 | ~4-6分钟 | ~15-25分钟 |
+| 模型大小 | ~85MB | ~85MB | ~85MB |
+| 参数数量 | ~21M | ~21M | ~21M |
+
+### 🍎 Apple Silicon 优化
+
+在 Apple M1/M2/M3 芯片上，脚本会自动启用 MPS (Metal Performance Shaders) 加速：
+
+```
+🍎 使用 Apple Silicon MPS 加速
+```
+
+**MPS 优势**：
+- 🚀 比 CPU 快 3-5 倍
+- 💡 统一内存架构，内存使用更高效
+- 🔋 功耗更低，发热更少
+- 🎯 专为 Apple Silicon 优化
+
+## 💾 数据集管理
+
+### 数据集存储位置
+- 数据集保存在：`./data/` 目录下
+- CIFAR-10 解压后路径：`./data/cifar-10-batches-py/`
+
+### 智能下载机制
+训练脚本会自动检测数据集是否存在：
+- ✅ **已存在**：跳过下载，直接使用
+- 📥 **不存在**：自动下载并解压
+
+### 手动管理数据集
+```bash
+# 查看数据集状态
+ls -la ./data/
+
+# 删除数据集（如需重新下载）
+rm -rf ./data/cifar-10-batches-py/
+
+# 数据集大小约 170MB
+du -sh ./data/
+```
 
 ## 🔧 自定义配置
 
@@ -173,6 +249,43 @@ weight_decay = 1e-4      # 权重衰减
 - 确保先运行训练脚本
 - 检查 `best_simple_vit.pth` 文件是否存在
 - 使用随机数据演示模式测试
+
+### Q4: Apple Silicon MPS 相关问题
+**Q**: 如何确认 MPS 是否可用？
+**A**: 运行脚本时查看输出：
+```bash
+🍎 使用 Apple Silicon MPS 加速  # MPS 可用
+💻 使用 CPU 设备              # MPS 不可用，回退到 CPU
+```
+
+**Q**: MPS 训练时出现错误怎么办？
+**A**: 可能的解决方案：
+- 更新 PyTorch 到最新版本：`pip install --upgrade torch torchvision`
+- 如果仍有问题，可以强制使用 CPU：
+```python
+# 在脚本开头添加
+import os
+os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+```
+
+**Q**: 如何检查 PyTorch MPS 支持？
+**A**: 运行以下命令：
+```python
+import torch
+print(f"MPS available: {torch.backends.mps.is_available()}")
+print(f"PyTorch version: {torch.__version__}")
+```
+
+## 📁 完整文件列表
+
+```
+test/ch01/
+├── README.md                  # 📖 章节说明文档
+├── check_device.py           # 🔧 设备检测工具
+├── 01-simple_vit.py          # ✅ 基础功能测试
+├── train_simple_vit.py       # 🚀 完整训练脚本
+└── inference_simple_vit.py   # 🔍 推理和部署脚本
+```
 
 ## 📚 相关资源
 
